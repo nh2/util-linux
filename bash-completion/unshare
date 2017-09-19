@@ -17,6 +17,7 @@ _unshare_module()
 				--net
 				--pid
 				--user
+				--kill-child
 				--help
 				--version"
 			COMPREPLY=( $(compgen -W "${OPTS[*]}" -- $cur) )

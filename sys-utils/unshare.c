@@ -28,6 +28,7 @@
 #include <sys/mount.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/prctl.h>
 
 /* we only need some defines missing in sys/mount.h, no libmount linkage */
 #include <libmount.h>
@@ -258,6 +259,7 @@ static void usage(int status)
 	fputs(_(" -U, --user[=<file>]       unshare user namespace\n"), out);
 	fputs(_(" -C, --cgroup[=<file>]     unshare cgroup namespace\n"), out);
 	fputs(_(" -f, --fork                fork before launching <program>\n"), out);
+	fputs(_("     --kill-child          when dying, kill the forked child (implies --fork)\n"), out);
 	fputs(_("     --mount-proc[=<dir>]  mount proc filesystem first (implies --mount)\n"), out);
 	fputs(_(" -r, --map-root-user       map current user to root (implies --user)\n"), out);
 	fputs(_("     --propagation slave|shared|private|unchanged\n"
@@ -277,7 +279,8 @@ int main(int argc, char *argv[])
 	enum {
 		OPT_MOUNTPROC = CHAR_MAX + 1,
 		OPT_PROPAGATION,
-		OPT_SETGROUPS
+		OPT_SETGROUPS,
+		OPT_KILLCHILD
 	};
 	static const struct option longopts[] = {
 		{ "help", no_argument, 0, 'h' },
@@ -292,6 +295,7 @@ int main(int argc, char *argv[])
 		{ "cgroup", optional_argument, 0, 'C' },
 
 		{ "fork", no_argument, 0, 'f' },
+		{ "kill-child", no_argument, NULL, OPT_KILLCHILD   },
 		{ "mount-proc", optional_argument, 0, OPT_MOUNTPROC },
 		{ "map-root-user", no_argument, 0, 'r' },
 		{ "propagation", required_argument, 0, OPT_PROPAGATION },
@@ -302,6 +306,7 @@ int main(int argc, char *argv[])
 	int setgrpcmd = SETGROUPS_NONE;
 	int unshare_flags = 0;
 	int c, forkit = 0, maproot = 0;
+	int kill_child = 0;
 	const char *procmnt = NULL;
 	pid_t pid = 0;
 	int fds[2];
@@ -374,6 +379,10 @@ int main(int argc, char *argv[])
 		case OPT_PROPAGATION:
 			propagation = parse_propagation(optarg);
 			break;
+		case OPT_KILLCHILD:
+			kill_child = 1;
+			forkit = 1;
+			break;
 		default:
 			usage(EXIT_FAILURE);
 		}
@@ -431,6 +440,9 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	if (kill_child)
+		if (prctl(PR_SET_PDEATHSIG, SIGKILL) < 0)
+			err(EXIT_FAILURE, "prctl failed");
 
 	if (maproot) {
 		if (setgrpcmd == SETGROUPS_ALLOW)
